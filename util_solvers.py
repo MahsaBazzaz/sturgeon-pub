@@ -12,6 +12,8 @@ SOLVER_Z3_SOLVE           = 'z3-slv'
 SOLVER_CVC5               = 'cvc5'
 SOLVER_SCIPY              = 'scipy'
 SOLVER_CVXPY              = 'cvxpy'
+SOLVER_QISKIT             = 'qiskit'
+SOLVER_QISKIT_SIM         = 'qiskit-sim'
 SOLVER_CLINGO_FE          = 'clingo-fe'
 SOLVER_CLINGO_BE          = 'clingo-be'
 SOLVER_PYSAT_FM           = 'pysat-fm'
@@ -20,7 +22,7 @@ SOLVER_PYSAT_FM_BOOL      = 'pysat-fm-boolonly'
 SOLVER_PYSAT_RC2_BOOL     = 'pysat-rc2-boolonly'
 SOLVER_PYSAT_MC           = 'pysat-minicard'
 SOLVER_PYSAT_GC41         = 'pysat-gluecard41'
-SOLVER_LIST               = [SOLVER_JSON_WRITE, SOLVER_DIMACS_WRITE_CNF, SOLVER_DIMACS_WRITE_WCNF, SOLVER_DIMACS_READ, SOLVER_Z3_OPTIMIZE, SOLVER_Z3_SOLVE, SOLVER_CVC5, SOLVER_SCIPY, SOLVER_CVXPY, SOLVER_CLINGO_FE, SOLVER_CLINGO_BE, SOLVER_PYSAT_FM, SOLVER_PYSAT_RC2, SOLVER_PYSAT_FM_BOOL, SOLVER_PYSAT_RC2_BOOL, SOLVER_PYSAT_MC, SOLVER_PYSAT_GC41]
+SOLVER_LIST               = [SOLVER_JSON_WRITE, SOLVER_DIMACS_WRITE_CNF, SOLVER_DIMACS_WRITE_WCNF, SOLVER_DIMACS_READ, SOLVER_Z3_OPTIMIZE, SOLVER_Z3_SOLVE, SOLVER_CVC5, SOLVER_SCIPY, SOLVER_CVXPY, SOLVER_QISKIT, SOLVER_QISKIT_SIM, SOLVER_CLINGO_FE, SOLVER_CLINGO_BE, SOLVER_PYSAT_FM, SOLVER_PYSAT_RC2, SOLVER_PYSAT_FM_BOOL, SOLVER_PYSAT_RC2_BOOL, SOLVER_PYSAT_MC, SOLVER_PYSAT_GC41]
 SOLVER_NOTEST_LIST        = [SOLVER_JSON_WRITE, SOLVER_DIMACS_WRITE_CNF, SOLVER_DIMACS_WRITE_WCNF, SOLVER_DIMACS_READ]
 
 
@@ -72,7 +74,37 @@ def try_import_cvxpy():
         cvxpy = None
         del cvxpy
         return False
+    
+def try_import_qiskit():
+    global numpy, QuadraticProgram, ScipyMilpOptimizer
+    try:
+        import numpy
+        from qiskit_optimization import QuadraticProgram
+        from qiskit_optimization.algorithms import ScipyMilpOptimizer
+        return True
+    except ImportError:
+        numpy = None
+        QuadraticProgram = None
+        ScipyMilpOptimizer = None
+        return False
 
+def try_import_qiskit_sim():
+    global numpy, Aer, QuantumInstance, QAOA, MinimumEigenOptimizer
+    try:
+        import numpy
+        from qiskit import Aer
+        from qiskit.utils import QuantumInstance
+        from qiskit.algorithms import QAOA
+        from qiskit_optimization.algorithms import MinimumEigenOptimizer
+        return True
+    except ImportError:
+        numpy = None
+        Aer = None
+        QuantumInstance = None
+        QAOA = None
+        MinimumEigenOptimizer = None
+        return False
+    
 def try_import_clingo():
     global clingo
     try:
@@ -118,6 +150,10 @@ def solver_id_to_solver(solver_id):
         return SciPySolver()
     elif solver_id == SOLVER_CVXPY:
         return CvxPySolver()
+    elif solver_id == SOLVER_QISKIT:
+        return QiskitSolver()
+    elif solver_id == SOLVER_QISKIT_SIM:
+        return QiskitSimSolver()
     elif solver_id == SOLVER_CLINGO_FE:
         return FrontendClingoSolver()
     elif solver_id == SOLVER_CLINGO_BE:
@@ -139,6 +175,18 @@ def solver_id_to_solver(solver_id):
 
 def solver_takes_filename(solver):
     return isinstance(solver, _SolverFilename)
+
+def make_solver(solver_ids, solver_filename, solver_timeout):
+    if len(solver_ids) == 1 and solver_timeout is None:
+        solver = solver_id_to_solver(solver_ids[0])
+    else:
+        solver = PortfolioSolver(solver_ids, solver_timeout)
+
+    if solver_filename is not None:
+        util_common.check(solver_takes_filename(solver), 'solver cannot use filename')
+        solver.set_filename(solver_filename)
+
+    return solver
 
 
 
@@ -1046,6 +1094,149 @@ class CvxPySolver(_MilpSolver):
         return (x.value > 0.5), int(prob.value)
 
 
+class QiskitSolver(_MilpSolver):
+    def __init__(self):
+        util_common.check(try_import_qiskit(), 'qubo not available')
+
+        super().__init__(SOLVER_SCIPY)
+
+    def _do_solve(self):
+        c = numpy.zeros(self._curr_id)
+        for coef, ind in self._weights:
+            c[ind] += coef
+
+        A = numpy.zeros((len(self._constraints), self._curr_id))
+        b_l = numpy.zeros(len(self._constraints))
+        b_u = numpy.zeros(len(self._constraints))
+        
+        for ii, (coefs, inds, lo, hi) in enumerate(self._constraints):
+            for coef, ind in zip(coefs, inds):
+                A[ii][ind] += coef
+            if lo is None:
+                b_l[ii] = -numpy.inf
+            else:
+                b_l[ii] = lo
+            if hi is None:
+                b_u[ii] = numpy.inf
+            else:
+                b_u[ii] = hi
+
+        qp = QuadraticProgram()
+        n = len(c) # number of variables
+        for i in range(n):
+            qp.binary_var(name=f"x_{i}")
+
+        # linear objective
+        qp.minimize(linear={f"x_{i}": c[i] for i in range(n)})
+
+        m, _ = A.shape # number of constraints
+        for row in range(m):
+            coeffs = {f"x_{j}": A[row, j] for j in range(n) if A[row, j] != 0}
+            lo, hi = b_l[row], b_u[row]
+            if lo is not None and hi is not None:
+                # Qiskit only allows a single sense (direction of the inequality) per constraint
+                # ">=": left-hand side ≥ rhs
+                # "<=": left-hand side ≤ rhs
+                # "==": left-hand side = rhs
+                # split two-sided bounds sinto two:
+                # lower bound: sum ≥ lo
+                qp.linear_constraint(linear=coeffs, sense=">=", rhs=lo, name=f"c{row}_lb")
+                # bound: sum ≤ hi
+                qp.linear_constraint(linear=coeffs, sense="<=", rhs=hi, name=f"c{row}_ub")
+            # one-sided bounds
+            elif lo is not None:
+                qp.linear_constraint(linear=coeffs, sense=">=", rhs=lo, name=f"c{row}")
+            elif hi is not None:
+                qp.linear_constraint(linear=coeffs, sense="<=", rhs=hi, name=f"c{row}")
+
+        optimizer = ScipyMilpOptimizer()
+        result = optimizer.solve(qp)
+
+        if result.status.name != "SUCCESS":
+            return None
+
+        util_common.check(int(result.fval) == result.fval, 'non-integer objective')
+
+        return (result.x > 0.5), int(result.fval)
+        
+    
+class QiskitSimSolver(_MilpSolver):
+    def __init__(self):
+        util_common.check(try_import_qiskit_sim(), 'qiskit sim not available')
+
+        super().__init__(SOLVER_SCIPY)
+
+    def _do_solve(self):
+        c = numpy.zeros(self._curr_id)
+        for coef, ind in self._weights:
+            c[ind] += coef
+
+        A = numpy.zeros((len(self._constraints), self._curr_id))
+        b_l = numpy.zeros(len(self._constraints))
+        b_u = numpy.zeros(len(self._constraints))
+        
+        for ii, (coefs, inds, lo, hi) in enumerate(self._constraints):
+            for coef, ind in zip(coefs, inds):
+                A[ii][ind] += coef
+            if lo is None:
+                b_l[ii] = -numpy.inf
+            else:
+                b_l[ii] = lo
+            if hi is None:
+                b_u[ii] = numpy.inf
+            else:
+                b_u[ii] = hi
+
+        qp = QuadraticProgram()
+        n = len(c) # number of variables
+        for i in range(n):
+            qp.binary_var(name=f"x_{i}")
+
+        # linear objective
+        qp.minimize(linear={f"x_{i}": c[i] for i in range(n)})
+
+        m, _ = A.shape # number of constraints
+        for row in range(m):
+            coeffs = {f"x_{j}": A[row, j] for j in range(n) if A[row, j] != 0}
+            lo, hi = b_l[row], b_u[row]
+            if lo is not None and hi is not None:
+                # Qiskit only allows a single sense (direction of the inequality) per constraint
+                # ">=": left-hand side ≥ rhs
+                # "<=": left-hand side ≤ rhs
+                # "==": left-hand side = rhs
+                # split two-sided bounds sinto two:
+                # lower bound: sum ≥ lo
+                qp.linear_constraint(linear=coeffs, sense=">=", rhs=lo, name=f"c{row}_lb")
+                # bound: sum ≤ hi
+                qp.linear_constraint(linear=coeffs, sense="<=", rhs=hi, name=f"c{row}_ub")
+            # one-sided bounds
+            elif lo is not None:
+                qp.linear_constraint(linear=coeffs, sense=">=", rhs=lo, name=f"c{row}")
+            elif hi is not None:
+                qp.linear_constraint(linear=coeffs, sense="<=", rhs=hi, name=f"c{row}")
+
+        # Aer's statevector simulator
+        quantum_instance = QuantumInstance(
+            backend=Aer.get_backend('aer_simulator_statevector'),
+            seed_simulator=123,
+            seed_transpiler=123
+        )
+
+        # QAOA as the variational algorithm:
+        qaoa = QAOA(
+            reps=1,   # number of QAOA layers
+            quantum_instance=quantum_instance
+        )
+
+        # Wrap it in Qiskit's MinimumEigenOptimizer:
+        quantum_optimizer = MinimumEigenOptimizer(min_eigen_solver=qaoa)
+        result = quantum_optimizer.solve(qp)
+        if result.status.name != "SUCCESS":
+            return None
+
+        util_common.check(int(result.fval) == result.fval, 'non-integer objective')
+
+        return (result.x > 0.5), int(result.fval)
 
 class FrontendClingoSolver(_SolverImpl):
     def __init__(self):

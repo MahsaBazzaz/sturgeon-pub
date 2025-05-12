@@ -17,5 +17,6 @@ source ../../../scratch/bazzaz.ma/QEnv/bin/activate
 
 pip install --upgrade pip
 # pip install -r requirements.txt
-pip install qiskit qiskit-optimization
+pip install qiskit qiskit-optimization qiskit-algorithms
+
 deactivate

@@ -93,18 +93,19 @@ def try_import_qiskit_sim():
     try:
         import numpy
         from qiskit_optimization import QuadraticProgram
-        from qiskit.algorithms import QAOA
+        from qiskit_algorithms import QAOA
         from qiskit_optimization.algorithms import MinimumEigenOptimizer
         from qiskit_algorithms.optimizers import COBYLA
         from qiskit.primitives import Sampler
-
         return True
+    
     except ImportError:
         numpy = None
-        Aer = None
-        QuantumInstance = None
+        QuadraticProgram = None
         QAOA = None
         MinimumEigenOptimizer = None
+        COBYLA = None
+        Sampler = None
         return False
     
 def try_import_clingo():

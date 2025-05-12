@@ -89,13 +89,15 @@ def try_import_qiskit():
         return False
 
 def try_import_qiskit_sim():
-    global numpy, Aer, QuantumInstance, QAOA, MinimumEigenOptimizer
+    global numpy, QuadraticProgram, QAOA, MinimumEigenOptimizer, COBYLA, Sampler
     try:
         import numpy
-        from qiskit import Aer
-        from qiskit.utils import QuantumInstance
+        from qiskit_optimization import QuadraticProgram
         from qiskit.algorithms import QAOA
         from qiskit_optimization.algorithms import MinimumEigenOptimizer
+        from qiskit_algorithms.optimizers import COBYLA
+        from qiskit.primitives import Sampler
+
         return True
     except ImportError:
         numpy = None
@@ -1215,20 +1217,9 @@ class QiskitSimSolver(_MilpSolver):
             elif hi is not None:
                 qp.linear_constraint(linear=coeffs, sense="<=", rhs=hi, name=f"c{row}")
 
-        # Aer's statevector simulator
-        quantum_instance = QuantumInstance(
-            backend=Aer.get_backend('aer_simulator_statevector'),
-            seed_simulator=123,
-            seed_transpiler=123
-        )
-
-        # QAOA as the variational algorithm:
-        qaoa = QAOA(
-            reps=1,   # number of QAOA layers
-            quantum_instance=quantum_instance
-        )
-
-        # Wrap it in Qiskit's MinimumEigenOptimizer:
+        sampler = Sampler(shots=1000, seed=123)
+        cobyla = COBYLA(maxiter=200)
+        qaoa = QAOA(sampler=sampler, optimizer=cobyla, reps=1)
         quantum_optimizer = MinimumEigenOptimizer(min_eigen_solver=qaoa)
         result = quantum_optimizer.solve(qp)
         if result.status.name != "SUCCESS":

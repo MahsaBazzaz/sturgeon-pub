@@ -1102,53 +1102,30 @@ class QiskitSolver(_MilpSolver):
 
     def _do_solve(self):
         c = numpy.zeros(self._curr_id)
-        for coef, ind in self._weights:
-            c[ind] += coef
-
-        A = numpy.zeros((len(self._constraints), self._curr_id))
-        b_l = numpy.zeros(len(self._constraints))
-        b_u = numpy.zeros(len(self._constraints))
-        
-        for ii, (coefs, inds, lo, hi) in enumerate(self._constraints):
-            for coef, ind in zip(coefs, inds):
-                A[ii][ind] += coef
-            if lo is None:
-                b_l[ii] = -numpy.inf
-            else:
-                b_l[ii] = lo
-            if hi is None:
-                b_u[ii] = numpy.inf
-            else:
-                b_u[ii] = hi
-
         qp = QuadraticProgram()
-        n = len(c) # number of variables
+        n = len(c)  # number of variables
+
+        # Add binary variables
         for i in range(n):
             qp.binary_var(name=f"x_{i}")
 
-        # linear objective
+        # Linear objective
         qp.minimize(linear={f"x_{i}": c[i] for i in range(n)})
 
-        m, _ = A.shape # number of constraints
-        for row in range(m):
-            coeffs = {f"x_{j}": A[row, j] for j in range(n) if A[row, j] != 0}
-            lo, hi = b_l[row], b_u[row]
+        # Constraints and bounds setup directly in QuadraticProgram
+        for ii, (coefs, inds, lo, hi) in enumerate(self._constraints):
+            coeffs = {f"x_{ind}": coef for coef, ind in zip(coefs, inds)}
+            
             if lo is not None and hi is not None:
-                # Qiskit only allows a single sense (direction of the inequality) per constraint
-                # ">=": left-hand side ≥ rhs
-                # "<=": left-hand side ≤ rhs
-                # "==": left-hand side = rhs
-                # split two-sided bounds sinto two:
-                # lower bound: sum ≥ lo
-                qp.linear_constraint(linear=coeffs, sense=">=", rhs=lo, name=f"c{row}_lb")
-                # bound: sum ≤ hi
-                qp.linear_constraint(linear=coeffs, sense="<=", rhs=hi, name=f"c{row}_ub")
-            # one-sided bounds
+                # Split two-sided bounds into two constraints
+                qp.linear_constraint(linear=coeffs, sense=">=", rhs=lo, name=f"c{ii}_lb")
+                qp.linear_constraint(linear=coeffs, sense="<=", rhs=hi, name=f"c{ii}_ub")
             elif lo is not None:
-                qp.linear_constraint(linear=coeffs, sense=">=", rhs=lo, name=f"c{row}")
+                qp.linear_constraint(linear=coeffs, sense=">=", rhs=lo, name=f"c{ii}")
             elif hi is not None:
-                qp.linear_constraint(linear=coeffs, sense="<=", rhs=hi, name=f"c{row}")
+                qp.linear_constraint(linear=coeffs, sense="<=", rhs=hi, name=f"c{ii}")
 
+        # Solve the problem using Scipy optimizer
         optimizer = ScipyMilpOptimizer()
         result = optimizer.solve(qp)
 

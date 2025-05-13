@@ -1218,9 +1218,8 @@ class QiskitSimSolver(_MilpSolver):
             elif hi is not None:
                 qp.linear_constraint(linear=coeffs, sense="<=", rhs=hi, name=f"c{row}")
 
-        sampler = Sampler(shots=1000, seed=123)
-        cobyla = COBYLA(maxiter=200)
-        qaoa = QAOA(sampler=sampler, optimizer=cobyla, reps=1)
+        
+        qaoa = QAOA(sampler=Sampler(), optimizer=COBYLA())
         quantum_optimizer = MinimumEigenOptimizer(min_eigen_solver=qaoa)
         result = quantum_optimizer.solve(qp)
         if result.status.name != "SUCCESS":

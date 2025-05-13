@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --partition=short
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=3
-#SBATCH --mem=200G
+#SBATCH --ntasks-per-node=1
+#SBATCH --mem=300G
 #SBATCH --time=8:00:00
 #SBATCH --job-name=mario
 #SBATCH --output=./log/output_%j.txt
@@ -26,11 +26,19 @@ height=$3
 solver=$4
 out="../../../scratch/bazzaz.ma/quantum_sturgeon/$solver"
 mkdir -p "$out"
+# Log start of the job
+echo "Job started at $(date)" > ./log/job_log.txt
+echo "Job Parameters: Scheme=$scheme, Width=$width, Height=$height, Solver=$solver" >> ./log/job_log.txt
 
 for ((i=0; i<100; i++))
 do
     rand_num=$RANDOM
     echo "Number: $i"
-    python scheme2output.py --outfile $out/$rand_num --schemefile ./levels/schemes/mario-$scheme.scheme --size $width $height --pattern-hard --count-hard --out-tlvl-none --out-result-none --randomize $rand_num --reach-start-goal l-r 6 --reach-connect "--src { --dst } --move platform --open Eo-" --solver $solver
+    # Use /usr/bin/time -v to log resource usage (time, memory, etc.)
+    /usr/bin/time -v python scheme2output.py --outfile $out/$rand_num --schemefile ./levels/schemes/mario-$scheme.scheme --size $width $height --pattern-hard --count-hard --out-tlvl-none --out-result-none --randomize $rand_num --reach-start-goal l-r 6 --reach-connect "--src { --dst } --move platform --open Eo-" --solver $solver
+    # Log memory usage and time taken for the iteration
+    echo "Iteration $i completed at $(date)" >> ./log/job_log.txt
 done
+# Log end of the job
+echo "Job completed at $(date)" >> ./log/job_log.txt
 deactivate

@@ -1178,15 +1178,16 @@ class QiskitSimSolver(_MilpSolver):
         b_l = numpy.zeros(len(self._constraints))
         b_u = numpy.zeros(len(self._constraints))
         
+        large_value = 1e5
         for ii, (coefs, inds, lo, hi) in enumerate(self._constraints):
             for coef, ind in zip(coefs, inds):
                 A[ii][ind] += coef
             if lo is None:
-                b_l[ii] = -numpy.inf
+                b_l[ii] = -large_value
             else:
                 b_l[ii] = lo
             if hi is None:
-                b_u[ii] = numpy.inf
+                b_u[ii] = large_value
             else:
                 b_u[ii] = hi
 

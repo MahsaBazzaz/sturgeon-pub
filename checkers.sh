@@ -24,22 +24,21 @@ scheme=$1
 width=$2
 height=$3
 solver=$4
-out="../../../scratch/bazzaz.ma/quantum_sturgeon/$scheme-$width-$height-$solver"
+out="../../../scratch/bazzaz.ma/quantum_sturgeon/checkers-$scheme-$width-$height-$solver"
 mkdir -p "$out"
 # Log start of the job
-echo "Job started at $(date)" > ./log/$scheme-$width-$height-$solver-log.txt
-echo "Job Parameters: Scheme=$scheme, Width=$width, Height=$height, Solver=$solver" >> ./log/job_log.txt
+echo "Job started at $(date)" > ./log/checkers-$scheme-$width-$height-$solver-log.txt
+echo "Job Parameters: Scheme=$scheme, Width=$width, Height=$height, Solver=$solver" >> ./log/checkers-$scheme-$width-$height-$solver-log.txt
 
 for ((i=0; i<100; i++))
 do
     rand_num=$RANDOM
     echo "Number: $i"
     # Use /usr/bin/time -v to log resource usage (time, memory, etc.)
-    # --reach-start-goal l-r 6 --reach-connect "--src { --dst } --move platform --open Eo-" 
     /usr/bin/time -v python scheme2output.py --outfile $out/$rand_num --schemefile ./levels/schemes/checkers-$scheme.scheme --size $width $height --pattern-hard --count-hard --out-tlvl-none --out-result-none --randomize $rand_num --solver $solver
     # Log memory usage and time taken for the iteration
-    echo "Iteration $i completed at $(date)" >> ./log/$scheme-$width-$height-$solver-log.txt
+    echo "Iteration $i completed at $(date)" >> ./log/checkers-$scheme-$width-$height-$solver-log.txt
 done
 # Log end of the job
-echo "Job completed at $(date)" >> ./log/$scheme-$width-$height-$solver-log.txt
+echo "Job completed at $(date)" >> ./log/checkers-$scheme-$width-$height-$solver-log.txt
 deactivate

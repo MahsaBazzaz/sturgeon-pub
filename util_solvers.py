@@ -1198,6 +1198,8 @@ class QiskitSimSolver(_MilpSolver):
 
 
         print(f"Building a problem with {qp.get_num_vars()} binary variables.")
+        sys.stdout.flush()
+        
         # linear objective
         qp.minimize(linear={f"x_{i}": c[i] for i in range(n)})
 

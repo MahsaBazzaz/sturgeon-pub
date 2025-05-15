@@ -1131,10 +1131,9 @@ class QiskitSolver(_MilpSolver):
             qp.binary_var(name=f"x_{i}")
 
 
-        print("→ # variables:",     qp.get_num_vars())
-        print("→ # linear constrs:", qp.get_num_linear_constraints())
-        print("→ # quadratic constrs:", qp.get_num_quadratic_constraints())
-        print("→ # objectives:",    qp.get_num_objective() > 0)
+        print("# variables:",     qp.get_num_vars())
+        print("# linear constrs:", qp.get_num_linear_constraints())
+        print("# quadratic constrs:", qp.get_num_quadratic_constraints())
         sys.stdout.flush()
 
 
@@ -1206,10 +1205,9 @@ class QiskitSimSolver(_MilpSolver):
             qp.binary_var(name=f"x_{i}")
 
 
-        print("→ # variables:",     qp.get_num_vars())
-        print("→ # linear constrs:", qp.get_num_linear_constraints())
-        print("→ # quadratic constrs:", qp.get_num_quadratic_constraints())
-        print("→ # objectives:",    qp.get_num_objective() > 0)
+        print("# variables:",     qp.get_num_vars())
+        print("# linear constrs:", qp.get_num_linear_constraints())
+        print("# quadratic constrs:", qp.get_num_quadratic_constraints())
         sys.stdout.flush()
 
 

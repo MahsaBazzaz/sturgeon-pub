@@ -1,5 +1,6 @@
 import json, multiprocessing, queue, random, re, sys
 import util_common
+import logging
 
 
 
@@ -1129,6 +1130,14 @@ class QiskitSolver(_MilpSolver):
         for i in range(n):
             qp.binary_var(name=f"x_{i}")
 
+
+        print("→ # variables:",     qp.get_num_vars())
+        print("→ # linear constrs:", qp.get_num_linear_constraints())
+        print("→ # quadratic constrs:", qp.get_num_quadratic_constraints())
+        print("→ # objectives:",    qp.get_num_objective() > 0)
+        sys.stdout.flush()
+
+
         # linear objective
         qp.minimize(linear={f"x_{i}": c[i] for i in range(n)})
 
@@ -1197,9 +1206,13 @@ class QiskitSimSolver(_MilpSolver):
             qp.binary_var(name=f"x_{i}")
 
 
-        print(f"Building a problem with {qp.get_num_vars()} binary variables.")
+        print("→ # variables:",     qp.get_num_vars())
+        print("→ # linear constrs:", qp.get_num_linear_constraints())
+        print("→ # quadratic constrs:", qp.get_num_quadratic_constraints())
+        print("→ # objectives:",    qp.get_num_objective() > 0)
         sys.stdout.flush()
-        
+
+
         # linear objective
         qp.minimize(linear={f"x_{i}": c[i] for i in range(n)})
 
@@ -1222,9 +1235,16 @@ class QiskitSimSolver(_MilpSolver):
                 qp.linear_constraint(linear=coeffs, sense=">=", rhs=lo, name=f"c{row}")
             elif hi is not None:
                 qp.linear_constraint(linear=coeffs, sense="<=", rhs=hi, name=f"c{row}")
-
         
-        qaoa = QAOA(sampler=Sampler(), optimizer=COBYLA())
+        # 1) turn on debug logging
+        for pkg in ["qiskit_optimization", "qiskit_algorithms", "qiskit_primitives"]:
+            logging.getLogger(pkg).setLevel(logging.DEBUG)
+            logging.getLogger(pkg).addHandler(logging.StreamHandler())
+
+        def qaoa_callback(eval_count, parameters, mean, std):
+            print(f"[QAOA] eval {eval_count:3d}   energy={mean:.6f}")
+
+        qaoa = QAOA(sampler=Sampler(), optimizer=COBYLA(),  callback=qaoa_callback)
         quantum_optimizer = MinimumEigenOptimizer(min_eigen_solver=qaoa)
         result = quantum_optimizer.solve(qp)
         if result.status.name != "SUCCESS":

@@ -2,9 +2,9 @@
 #SBATCH --partition=short
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --mem=300G
+#SBATCH --mem=2TB
 #SBATCH --time=8:00:00
-#SBATCH --job-name=test_solvers
+#SBATCH --job-name=qiskit_sim
 #SBATCH --output=./log/output_%j.txt
 #SBATCH --error=./log/error_%j.txt
 
@@ -16,11 +16,7 @@ source ../../../scratch/bazzaz.ma/QEnv/bin/activate
 
 pip install --upgrade pip
 
-if [ "$#" -ne 1 ]; then
-  echo "Usage: $0 <solver>"
-  exit 1
-fi
-solver=$1
+solver="qiskit-sim"
 
 echo "Job started at $(date)" > ./log/test-solver-$solver-log.txt
 echo "Job Parameters: Solver=$solver" >> ./log/test-solver-$solver-log.txt

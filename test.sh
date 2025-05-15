@@ -2,8 +2,8 @@
 #SBATCH --partition=short
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --mem=500G
-#SBATCH --time=8:00:00
+#SBATCH --mem=200G
+#SBATCH --time=2:00:00
 #SBATCH --job-name=test_solvers
 #SBATCH --output=./log/output_%j.txt
 #SBATCH --error=./log/error_%j.txt
